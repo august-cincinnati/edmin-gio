@@ -1,0 +1,12 @@
+# Built binaries (`go build` names it after the module, edmin; `gio` is the
+# folder's name, as given by `go build -o gio` or an IDE)
+/edmin
+/gio
+
+# Test binaries and coverage profiles (go test -c, -coverprofile)
+*.test
+*.out
+
+# EdMin's own per-project state when editing this repo with EdMin: build
+# commands, theme and terminal names
+/.edmin/
