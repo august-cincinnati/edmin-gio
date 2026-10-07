@@ -178,6 +178,7 @@ func newAppState(root string) *App {
 	a.tree = NewFileTree(a)
 	a.search = NewSearchDialog(a)
 	a.build = NewBuildPanel(a)
+	a.deco.OnClose = a.requestClose
 	a.setRoot(root)
 	a.restoreTerminals()
 	return a
@@ -199,10 +200,7 @@ func (a *App) loop() {
 		case *app.ClosingEvent:
 			if !a.closeOK {
 				e.Abort()
-				a.onClose(func() {
-					a.closeOK = true
-					a.win.Perform(system.ActionClose)
-				})
+				a.requestClose()
 			}
 		case app.ConfigEvent:
 			a.deco.config(e.Config)
@@ -212,7 +210,11 @@ func (a *App) loop() {
 			a.layout(gtx)
 			e.Frame(gtx.Ops)
 		}
+		closing := a.deco.takeClose()
 		uiMu.Unlock()
+		if closing {
+			a.win.Perform(system.ActionClose)
+		}
 	}
 }
 
@@ -707,6 +709,18 @@ func (a *App) confirmQuit(then func()) {
 	})
 }
 
+// requestClose asks to close the window, as its close button does.
+func (a *App) requestClose() {
+	if a.closeOK {
+		a.deco.closing = true
+		return
+	}
+	a.onClose(func() {
+		a.closeOK = true
+		a.deco.closing = true
+	})
+}
+
 // onClose handles the window's close button. With other windows open it asks
 // whether to close just this one or all of them. It calls close if this
 // window should close.
@@ -742,7 +756,8 @@ func (a *App) closeAll(close func()) {
 			for _, x := range list {
 				if x != a {
 					x.closeOK = true
-					x.win.Perform(system.ActionClose)
+					x.deco.closing = true
+					x.win.Invalidate()
 				}
 			}
 			close()
@@ -1045,7 +1060,7 @@ func (a *App) onShortcut(e key.Event) {
 		return
 	case ctrlShift && name == "X":
 		// Goes through the closing check, like the title bar's close button.
-		a.win.Perform(system.ActionClose)
+		a.requestClose()
 		return
 	}
 	if inTerm || !ctrl && !ctrlShift {

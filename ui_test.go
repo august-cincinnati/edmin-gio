@@ -172,6 +172,29 @@ func TestEditingAndSave(t *testing.T) {
 	}
 }
 
+// Closing the window asks about unsaved files first, and leaves the close
+// itself to the window's loop, which does it between events.
+func TestCloseShortcut(t *testing.T) {
+	h := newHarness(t, map[string]string{"a.txt": "a\n"})
+	a := h.a
+	uiMu.Lock()
+	a.editors.Open(filepath.Join(a.root, "a.txt"))
+	uiMu.Unlock()
+	h.frames(3)
+	h.typeText("b")
+	h.send(press("X", key.ModShortcut|key.ModShift))
+	if len(a.dialogs) != 1 || a.deco.closing {
+		t.Fatalf("no save question: dialogs %d, closing %v", len(a.dialogs), a.deco.closing)
+	}
+	uiMu.Lock()
+	a.dialogs[0].respond(RespNo)
+	uiMu.Unlock()
+	h.frames(2)
+	if !a.closeOK || !a.deco.takeClose() {
+		t.Fatal("Don't Save didn't close the window")
+	}
+}
+
 func TestCRLFKept(t *testing.T) {
 	h := newHarness(t, map[string]string{"a.txt": "one\r\ntwo\r\n"})
 	a := h.a

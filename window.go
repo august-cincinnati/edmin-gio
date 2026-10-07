@@ -18,6 +18,20 @@ type windowDeco struct {
 	maximized bool
 	min, max  Button
 	close     Button
+	// OnClose handles the close button; without it the button just closes
+	// the window.
+	OnClose func()
+	closing bool // close the window once the current event is handled
+}
+
+// takeClose reports whether the window should now close, clearing the
+// request. The window's loop calls it after each event, and performs the
+// close outside event handling: on macOS, closing during an event destroys
+// the window before Perform returns, and finishing the frame then crashes.
+func (d *windowDeco) takeClose() bool {
+	c := d.closing
+	d.closing = false
+	return c
 }
 
 func (d *windowDeco) config(c app.Config) {
@@ -57,7 +71,11 @@ func (d *windowDeco) headerBar(gtx layout.Context, w *app.Window, pal palette, t
 			}
 		}
 		if d.close.Clicked(gtx) {
-			w.Perform(system.ActionClose)
+			if d.OnClose != nil {
+				d.OnClose()
+			} else {
+				d.closing = true
+			}
 		}
 	}
 	type wb struct {

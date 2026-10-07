@@ -100,7 +100,8 @@ func (s *SearchDialog) present() {
 
 func (s *SearchDialog) hide() {
 	if s.win != nil {
-		s.win.Perform(system.ActionClose)
+		s.deco.closing = true
+		s.win.Invalidate()
 	}
 }
 
@@ -124,7 +125,11 @@ func (s *SearchDialog) loop(w *app.Window) {
 			s.layout(gtx)
 			e.Frame(gtx.Ops)
 		}
+		closing := s.deco.takeClose()
 		uiMu.Unlock()
+		if closing {
+			w.Perform(system.ActionClose)
+		}
 	}
 }
 
