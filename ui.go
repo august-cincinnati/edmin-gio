@@ -35,10 +35,11 @@ import (
 var shaper = text.NewShaper()
 
 // The interface and monospace fonts follow the desktop's settings, as GTK
-// does, with DejaVu-style fallbacks when they can't be read.
+// does, with DejaVu-style fallbacks when they can't be read (and Windows's
+// own fonts after those).
 var (
-	uiFont   = font.Font{Typeface: "Ubuntu Sans,Cantarell,Noto Sans,DejaVu Sans,sans-serif"}
-	monoFont = font.Font{Typeface: "DejaVu Sans Mono,Liberation Mono,monospace"}
+	uiFont   = font.Font{Typeface: "Ubuntu Sans,Cantarell,Noto Sans,DejaVu Sans,Segoe UI,sans-serif"}
+	monoFont = font.Font{Typeface: "DejaVu Sans Mono,Liberation Mono,Consolas,monospace"}
 	uiSize   = unit.Sp(11 * 4.0 / 3)
 	monoSize = unit.Sp(11 * 4.0 / 3)
 )

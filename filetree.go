@@ -614,7 +614,9 @@ func (f *FileTree) Layout(gtx layout.Context, pal palette) layout.Dimensions {
 
 // insideRoot reports whether a path relative to the project root stays inside it.
 func insideRoot(rel string) bool {
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+	rel = filepath.Clean(rel)
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) &&
+		!filepath.IsAbs(rel) && filepath.VolumeName(rel) == "" && !os.IsPathSeparator(rel[0])
 }
 
 func relPath(root, p string) string {

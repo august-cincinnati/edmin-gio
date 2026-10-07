@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +35,7 @@ type harness struct {
 func newHarness(t *testing.T, files map[string]string) *harness {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("APPDATA", t.TempDir()) // the config directory on Windows
 	root := t.TempDir()
 	for name, data := range files {
 		p := filepath.Join(root, name)
@@ -42,8 +45,12 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 		}
 	}
 	// No shells: the tests don't need them.
+	shell := `["/bin/cat"]`
+	if runtime.GOOS == "windows" {
+		shell = `["cmd.exe", "/q"]`
+	}
 	os.MkdirAll(filepath.Join(root, ".edmin"), 0755)
-	os.WriteFile(filepath.Join(root, ".edmin", "settings.json"), []byte(`{"shell":["/bin/cat"]}`), 0644)
+	os.WriteFile(filepath.Join(root, ".edmin", "settings.json"), []byte(`{"shell":`+shell+`}`), 0644)
 	uiMu.Lock()
 	a := newAppState(root)
 	uiMu.Unlock()
@@ -162,6 +169,42 @@ func TestEditingAndSave(t *testing.T) {
 	}
 	if !strings.Contains(a.status, "Ln 5, Col 3") || !strings.Contains(a.status, "Go") {
 		t.Fatalf("status = %q", a.status)
+	}
+}
+
+func TestCRLFKept(t *testing.T) {
+	h := newHarness(t, map[string]string{"a.txt": "one\r\ntwo\r\n"})
+	a := h.a
+	uiMu.Lock()
+	e := a.editors.Open(filepath.Join(a.root, "a.txt"))
+	uiMu.Unlock()
+	h.frames(2)
+	if got := e.Text(); got != "one\ntwo\n" {
+		t.Fatalf("text = %q", got)
+	}
+	h.send(press(key.NameEnd, 0), press(key.NameReturn, 0))
+	h.typeText("new")
+	h.send(press("S", key.ModShortcut))
+	if data, _ := os.ReadFile(e.Path); string(data) != "one\r\nnew\r\ntwo\r\n" {
+		t.Fatalf("saved %q", data)
+	}
+}
+
+func TestGotoLine(t *testing.T) {
+	h := newHarness(t, map[string]string{"a.txt": strings.Repeat("line\n", 200)})
+	a := h.a
+	uiMu.Lock()
+	e := a.editors.Open(filepath.Join(a.root, "a.txt"))
+	uiMu.Unlock()
+	h.frames(3)
+	h.send(press("G", key.ModShortcut))
+	if len(a.dialogs) != 1 {
+		t.Fatal("Ctrl+G did not open the Go to Line prompt")
+	}
+	h.typeText("150")
+	h.send(press(key.NameReturn, 0))
+	if s, _, _ := e.View.Selection(); len(a.dialogs) != 0 || s != (Pos{149, 0}) || !e.View.focused {
+		t.Fatalf("dialogs=%d cursor=%v focused=%v", len(a.dialogs), s, e.View.focused)
 	}
 }
 
@@ -288,7 +331,7 @@ func TestTerminalTabs(t *testing.T) {
 	if len(a.terminals) != 2 || !a.terminals[1].focused {
 		t.Fatal("Ctrl+Shift+T did not open and focus a terminal")
 	}
-	// Typing goes to the shell (cat echoes it back).
+	// Typing goes to the shell (cat, or cmd, echoes it back).
 	h.typeText("hi")
 	h.send(press(key.NameReturn, 0))
 	time.Sleep(300 * time.Millisecond)
@@ -401,5 +444,43 @@ func TestBuildRunKeepsFocus(t *testing.T) {
 	h.send(press(key.NameReturn, 0))
 	if len(a.dialogs) != 0 || !a.build.focused {
 		t.Fatalf("dialogs=%d build focused=%v", len(a.dialogs), a.build.focused)
+	}
+}
+
+func TestWheelScrollsLists(t *testing.T) {
+	files := map[string]string{}
+	var cmds []string
+	for i := 0; i < 80; i++ {
+		files[fmt.Sprintf("f%02d.txt", i)] = "x\n"
+		cmds = append(cmds, fmt.Sprintf(`{"name":"c%02d","command":"true"}`, i))
+	}
+	files[".edmin/commands.json"] = "[" + strings.Join(cmds, ",") + "]"
+	h := newHarness(t, files)
+	a := h.a
+	uiMu.Lock()
+	a.build.Load()
+	uiMu.Unlock()
+	h.frames(2)
+	wheel := func(p image.Point) {
+		pos := f32.Pt(float32(p.X), float32(p.Y))
+		h.router.Queue(
+			pointer.Event{Kind: pointer.Move, Source: pointer.Mouse, Position: pos},
+			pointer.Event{Kind: pointer.Scroll, Source: pointer.Mouse, Position: pos, Scroll: f32.Pt(0, 120)},
+		)
+		h.frames(2)
+	}
+	// Over a row, not the empty space below the rows.
+	wheel(image.Pt(60, 47+24+12))
+	if a.tree.list.offY == 0 {
+		t.Error("wheel over an explorer row did not scroll it")
+	}
+	wheel(image.Pt(h.size.X-100, 140))
+	if a.build.list.offY == 0 {
+		t.Error("wheel over a build command did not scroll the list")
+	}
+	// Rows still take clicks.
+	h.click(image.Pt(60, 47+24+12), 0, 2)
+	if e := a.editors.Current(); e == nil || !strings.HasPrefix(filepath.Base(e.Path), "f") {
+		t.Error("double click on a scrolled explorer row did not open its file")
 	}
 }

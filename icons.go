@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"io"
 	"io/fs"
 	"math"
 	"os"
@@ -119,6 +120,10 @@ var (
 // iconImage returns name rendered at px pixels, or nil if it isn't found.
 // Symbolic icons take the colour col.
 func iconImage(name string, px int, col color.NRGBA) *image.NRGBA {
+	if !strings.HasSuffix(name, "-symbolic") && builtinIcons[name+"-symbolic"] != "" && len(findIcon(name)) == 0 {
+		// No icon theme (as on Windows): use the built-in symbolic icon.
+		return iconImage(name+"-symbolic", px, col)
+	}
 	k := iconKey{name, px, col}
 	if !strings.HasSuffix(name, "-symbolic") {
 		k.col = color.NRGBA{}
@@ -133,9 +138,15 @@ func iconImage(name string, px int, col color.NRGBA) *image.NRGBA {
 	if strings.HasSuffix(name, "-symbolic") {
 		for _, f := range files {
 			if strings.HasSuffix(f, ".svg") {
-				img = renderSymbolic(f, px, col)
+				if fh, err := os.Open(f); err == nil {
+					img = renderSymbolic(fh, px, col)
+					fh.Close()
+				}
 				break
 			}
+		}
+		if img == nil && builtinIcons[name] != "" {
+			img = renderSymbolic(strings.NewReader(builtinIcons[name]), px, col)
 		}
 	} else {
 		img = loadPNGIcon(files, px)
@@ -623,13 +634,8 @@ func styleProp(attrs map[string]string, k string) string {
 }
 
 // parseSymbolic reads the shapes of a symbolic SVG, in viewBox units.
-func parseSymbolic(path string) (shapes []shape, vbW, vbH float64, vbX, vbY float64) {
-	fh, err := os.Open(path)
-	if err != nil {
-		return nil, 0, 0, 0, 0
-	}
-	defer fh.Close()
-	dec := xml.NewDecoder(fh)
+func parseSymbolic(r io.Reader) (shapes []shape, vbW, vbH float64, vbX, vbY float64) {
+	dec := xml.NewDecoder(r)
 	type frame struct {
 		m       mat
 		hidden  bool
@@ -743,8 +749,8 @@ func parseSymbolic(path string) (shapes []shape, vbW, vbH float64, vbX, vbY floa
 func ff(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
 
 // renderSymbolic rasterises a symbolic icon at px×px in colour col.
-func renderSymbolic(path string, px int, col color.NRGBA) *image.NRGBA {
-	shapes, vbW, vbH, vbX, vbY := parseSymbolic(path)
+func renderSymbolic(r io.Reader, px int, col color.NRGBA) *image.NRGBA {
+	shapes, vbW, vbH, vbX, vbY := parseSymbolic(r)
 	if len(shapes) == 0 {
 		return nil
 	}

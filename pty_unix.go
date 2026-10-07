@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package main
 
 import (
@@ -21,20 +23,40 @@ type winsize struct {
 	Rows, Cols, X, Y uint16
 }
 
-func setPtySize(f *os.File, rows, cols int) error {
-	ws := winsize{Rows: uint16(rows), Cols: uint16(cols)}
-	return ioctl(f.Fd(), syscall.TIOCSWINSZ, uintptr(unsafe.Pointer(&ws)))
+// ptyProc is a shell running in a pseudo terminal.
+type ptyProc struct {
+	master *os.File
+	cmd    *exec.Cmd
 }
+
+func (p *ptyProc) Read(b []byte) (int, error)  { return p.master.Read(b) }
+func (p *ptyProc) Write(b []byte) (int, error) { return p.master.Write(b) }
+func (p *ptyProc) Wait() error                 { return p.cmd.Wait() }
+
+// Resize tells the shell the terminal's new size.
+func (p *ptyProc) Resize(rows, cols int) error {
+	ws := winsize{Rows: uint16(rows), Cols: uint16(cols)}
+	return ioctl(p.master.Fd(), syscall.TIOCSWINSZ, uintptr(unsafe.Pointer(&ws)))
+}
+
+// Kill ends the shell.
+func (p *ptyProc) Kill() {
+	p.cmd.Process.Signal(os.Interrupt)
+	p.cmd.Process.Kill()
+}
+
+func (p *ptyProc) Close() error { return p.master.Close() }
 
 // startShell launches argv (the user's shell if empty) attached to a new pty
 // in dir.
-func startShell(dir string, argv []string, rows, cols int) (*os.File, *exec.Cmd, error) {
+func startShell(dir string, argv []string, rows, cols int) (*ptyProc, error) {
 	master, slave, err := openPty()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer slave.Close()
-	setPtySize(master, rows, cols)
+	p := &ptyProc{master: master}
+	p.Resize(rows, cols)
 
 	if len(argv) == 0 {
 		argv = defaultShell()
@@ -46,7 +68,8 @@ func startShell(dir string, argv []string, rows, cols int) (*os.File, *exec.Cmd,
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
 	if err := cmd.Start(); err != nil {
 		master.Close()
-		return nil, nil, err
+		return nil, err
 	}
-	return master, cmd, nil
+	p.cmd = cmd
+	return p, nil
 }

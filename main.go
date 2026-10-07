@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 
 	"gioui.org/app"
 	"gioui.org/io/event"
@@ -153,7 +152,7 @@ func detach(args []string) bool {
 	cmd := exec.Command(exe, args...)
 	cmd.Env = append(os.Environ(), detachedEnv+"=1")
 	// Stdin, stdout and stderr are left nil, so they go to /dev/null.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.SysProcAttr = detachedAttr()
 	if err := cmd.Start(); err != nil {
 		return false
 	}

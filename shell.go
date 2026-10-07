@@ -6,11 +6,13 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
 // Choosing the shell a project's terminals run: the project's "shell"
-// setting, else one detected from where the project lives, else $SHELL.
+// setting, else one detected from where the project lives, else $SHELL
+// (PowerShell on Windows).
 
 // shellEnv is what detectShell looks at, gathered by hostShellEnv; tests
 // supply their own.
@@ -41,8 +43,21 @@ func projectShell(root string) []string {
 	return detectShell(root, hostShellEnv())
 }
 
-// defaultShell is the user's login shell.
+// defaultShell is the user's login shell. On Windows it is PowerShell (7 if
+// installed), else cmd.exe; $SHELL there is usually an MSYS path that only
+// Git Bash understands.
 func defaultShell() []string {
+	if runtime.GOOS == "windows" {
+		for _, sh := range []string{"pwsh.exe", "powershell.exe"} {
+			if p, err := exec.LookPath(sh); err == nil {
+				return []string{p, "-NoLogo"}
+			}
+		}
+		if sh := os.Getenv("ComSpec"); sh != "" {
+			return []string{sh}
+		}
+		return []string{"cmd.exe"}
+	}
 	if sh := os.Getenv("SHELL"); sh != "" {
 		return []string{sh}
 	}

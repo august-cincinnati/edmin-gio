@@ -5,8 +5,6 @@ import (
 	"image"
 	"image/color"
 	"io"
-	"os"
-	"os/exec"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -27,8 +25,7 @@ const termScrollback = 5000
 type Terminal struct {
 	app   *App
 	vt    *VT
-	pty   *os.File
-	cmd   *exec.Cmd
+	pty   *ptyProc
 	dir   string
 	shell []string
 
@@ -72,7 +69,7 @@ func (t *Terminal) start(rows, cols int) {
 	t.started = true
 	t.vt = NewVT(rows, cols)
 	t.vt.Reply = func(b []byte) { t.pty.Write(b) }
-	pty, cmd, err := startShell(t.dir, t.shell, rows, cols)
+	pty, err := startShell(t.dir, t.shell, rows, cols)
 	if err != nil {
 		shell := t.shell
 		if len(shell) == 0 {
@@ -81,7 +78,7 @@ func (t *Terminal) start(rows, cols int) {
 		t.errText = "failed to start " + strings.Join(shell, " ") + ": " + err.Error()
 		return
 	}
-	t.pty, t.cmd = pty, cmd
+	t.pty = pty
 	go t.readLoop()
 }
 
@@ -97,7 +94,7 @@ func (t *Terminal) readLoop() {
 			break
 		}
 	}
-	t.cmd.Wait()
+	t.pty.Wait()
 	t.app.later(func() {
 		if !t.closed.Load() && t.onExit != nil {
 			t.onExit()
@@ -252,11 +249,8 @@ func (t *Terminal) Close() {
 	if t.closed.Swap(true) {
 		return
 	}
-	if t.cmd != nil && t.cmd.Process != nil {
-		t.cmd.Process.Signal(os.Interrupt)
-		t.cmd.Process.Kill()
-	}
 	if t.pty != nil {
+		t.pty.Kill()
 		t.pty.Close()
 	}
 }
@@ -326,7 +320,7 @@ func (t *Terminal) Layout(gtx layout.Context) layout.Dimensions {
 		} else if t.vt != nil && (rowsN != t.vt.rows || cols != t.vt.cols) {
 			t.vt.Resize(rowsN, cols)
 			if t.pty != nil {
-				setPtySize(t.pty, rowsN, cols)
+				t.pty.Resize(rowsN, cols)
 			}
 			t.update()
 		}

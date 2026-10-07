@@ -618,11 +618,6 @@ func (l *scrollList) layout(gtx layout.Context, n, rowH, contentW int, row func(
 	l.offY = max(0, min(l.offY, contentH-size.Y))
 	l.offX = max(0, min(l.offX, contentW-size.X))
 	defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
-	{
-		r := clip.Rect{Max: size}.Push(gtx.Ops)
-		event.Op(gtx.Ops, l)
-		r.Pop()
-	}
 	first := l.offY / max(rowH, 1)
 	for i := first; i < n && i*rowH-l.offY < size.Y; i++ {
 		off := op.Offset(image.Pt(-l.offX, i*rowH-l.offY)).Push(gtx.Ops)
@@ -630,6 +625,15 @@ func (l *scrollList) layout(gtx layout.Context, n, rowH, contentW int, row func(
 		g.Constraints = layout.Exact(image.Pt(max(size.X+l.offX, contentW), rowH))
 		row(g, i)
 		off.Pop()
+	}
+	// The scroll area goes over the rows, since their click areas would
+	// hide one beneath them, and passes clicks through to them.
+	{
+		pass := pointer.PassOp{}.Push(gtx.Ops)
+		r := clip.Rect{Max: size}.Push(gtx.Ops)
+		event.Op(gtx.Ops, l)
+		r.Pop()
+		pass.Pop()
 	}
 	l.sb.layout(gtx, size, contentH, l.offY, max(contentW, size.X), l.offX, &l.offY, &l.offX)
 	return layout.Dimensions{Size: size}

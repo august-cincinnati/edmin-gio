@@ -28,6 +28,7 @@ type Editor struct {
 	View *CodeView
 	lang *Language
 	area *EditorArea
+	crlf bool // the file had Windows (CRLF) line endings; Save keeps them
 
 	hlPending bool
 	hlGen     int // incremented on every edit; stale highlight results are dropped
@@ -129,8 +130,13 @@ func (a *EditorArea) Open(path string) *Editor {
 		a.app.showError("Cannot open file", path+" does not look like a UTF-8 text file.")
 		return nil
 	}
-	e := &Editor{Path: path, area: a, lang: languageFor(path), lastBreak: true}
-	e.View = NewCodeView(string(data))
+	text := string(data)
+	crlf := strings.Contains(text, "\r\n")
+	if crlf {
+		text = strings.ReplaceAll(text, "\r\n", "\n")
+	}
+	e := &Editor{Path: path, area: a, lang: languageFor(path), lastBreak: true, crlf: crlf}
+	e.View = NewCodeView(text)
 	e.connect()
 
 	// The new tab goes after the current one's position at the end, as in GTK.
@@ -196,7 +202,11 @@ func (a *EditorArea) Unsaved() []*Editor {
 func (e *Editor) Text() string { return e.View.Text() }
 
 func (e *Editor) Save() bool {
-	if err := os.WriteFile(e.Path, []byte(e.Text()), 0644); err != nil {
+	text := e.Text()
+	if e.crlf {
+		text = strings.ReplaceAll(text, "\n", "\r\n")
+	}
+	if err := os.WriteFile(e.Path, []byte(text), 0644); err != nil {
 		e.area.app.showError("Save failed", err.Error())
 		return false
 	}

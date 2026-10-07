@@ -10,7 +10,8 @@ dependencies; everything else, including the terminal emulator, is plain Go.
 EdMin draws its whole window itself, in the style of a GTK 3 application on
 GNOME (the Yaru theme): a header bar with the window buttons, the desktop's
 interface font (read from GNOME's settings), fontconfig's `monospace` font for
-code, and icons from the desktop's icon theme.
+code, and icons from the desktop's icon theme. On Windows, which has none of
+those, it uses Segoe UI, Consolas and a built-in set of symbolic icons.
 
 ## Features
 
@@ -39,7 +40,8 @@ code, and icons from the desktop's icon theme.
   (the menu button in the header bar, or `Ctrl+4`). It applies immediately to
   that window only, so different projects can look different. The choice is
   saved for the project in `.edmin/settings.json`, and in
-  `~/.config/edmin/settings.json` as the default for projects without one.
+  `~/.config/edmin/settings.json` (`%AppData%\edmin\settings.json` on
+  Windows) as the default for projects without one.
 - **Terminals** in tabs along the bottom. Each runs the project's shell
   (see [Terminal shells](#terminal-shells)) through a
   pseudo-terminal and a built-in xterm-compatible emulator that supports
@@ -109,10 +111,10 @@ cache.
 
 ## Requirements
 
-- Linux or macOS
+- Linux, macOS, or Windows 10 version 1809 or newer
 - Go 1.25 or newer
-- A C compiler (Gio and tree-sitter use cgo) and, on Linux, the Wayland,
-  X11, EGL and Vulkan development files Gio needs
+- A C compiler (tree-sitter uses cgo, as does Gio except on Windows) and, on
+  Linux, the Wayland, X11, EGL and Vulkan development files Gio needs
 
 On Debian/Ubuntu:
 
@@ -131,6 +133,10 @@ Optional, on Linux:
 
 On macOS, install Go and the Xcode command line tools.
 
+On Windows, install Go and a MinGW-w64 C compiler, for example from
+[MSYS2](https://www.msys2.org) (`pacman -S mingw-w64-ucrt-x86_64-gcc`), with
+its `bin` folder on your `PATH`.
+
 On macOS, Cmd works in place of Ctrl for every shortcut and for
 Cmd+Click. In the terminal, Cmd+C and Cmd+V copy and paste, and Ctrl keeps
 its usual terminal meaning (Ctrl+C interrupts).
@@ -146,6 +152,13 @@ To build for Wayland only (without the X11 development files), add
 
 ```sh
 go build -tags nox11 -o edmin .
+```
+
+On Windows, add `-H=windowsgui` so no console window opens alongside
+EdMin:
+
+```sh
+go build -ldflags=-H=windowsgui -o edmin.exe .
 ```
 
 The first build compiles Gio and the tree-sitter grammars, which takes a
@@ -171,7 +184,8 @@ To work on several projects at once, use the new-window button next to it, or
 tabs, terminals, build commands and colour theme. EdMin exits when the last
 window is closed.
 
-EdMin remembers which projects are open, in `~/.config/edmin/settings.json`.
+EdMin remembers which projects are open, in `~/.config/edmin/settings.json`
+(`%AppData%\edmin\settings.json` on Windows).
 Running `./edmin` with no arguments reopens them, one window each, skipping
 any folder that no longer exists. Closing a window removes its project from
 the list, except for the last window: the projects open when you quit are the
@@ -245,7 +259,10 @@ Each project's terminals run a shell picked in this order:
      mount's source, so aliases in `~/.ssh/config` work. The mount's port
      setting isn't visible to EdMin, so use the `"shell"` setting for a
      non-standard port, as in the example above.
-3. **Your `$SHELL`**, or `/bin/sh` if it isn't set.
+3. **Your `$SHELL`**, or `/bin/sh` if it isn't set. On Windows it is
+   PowerShell (`pwsh.exe` if installed, otherwise `powershell.exe`), or
+   `cmd.exe` if neither is found. To use another shell, such as Git Bash,
+   set `"shell"`, for example `["C:\\Program Files\\Git\\bin\\bash.exe", "-l"]`.
 
 Hover over a terminal tab to see the command it runs. Build commands are
 typed into that shell, so commands written for bash won't work in
@@ -279,6 +296,7 @@ buttons.
 | `dialogs.go`  | Modal dialogs, context menus, the folder chooser          |
 | `ui.go`       | Fonts, colours, drawing helpers and the UI event queue    |
 | `icons.go`    | Icons from the desktop's icon theme (SVG and PNG)         |
+| `icons_builtin.go` | Built-in symbolic icons, for when there is no icon theme (Windows) |
 | `filetree.go` | File explorer                                             |
 | `search.go`   | Project-wide search and the results dialog                |
 | `lang.go`     | Language table, highlighting and definition/usage analysis |
@@ -286,7 +304,8 @@ buttons.
 | `build.go`    | Build commands panel                                      |
 | `terminal.go` | Terminal widget (rendering and keyboard input)            |
 | `vt.go`       | VT100/xterm screen emulator (no UI code)                  |
-| `pty_*.go`    | Pseudo-terminal support (shared, Linux and macOS ioctls)  |
+| `pty_*.go`    | Pseudo-terminal support (Unix ptys with Linux and macOS ioctls; ConPTY on Windows) |
+| `detach_*.go` | Starting EdMin in the background (Unix sessions, Windows detached processes) |
 | `keys.go`     | Modifier handling (Cmd as Ctrl on macOS)                  |
 | `shell.go`    | Choosing each project's terminal shell (WSL, sshfs)     |
 | `util.go`     | Word-based fallbacks for files without a grammar          |
@@ -328,9 +347,10 @@ EDMIN_SHOT=shot.png EDMIN_PROJ=$PWD EDMIN_FILE=main.go go test -run TestScreensh
   every pattern compiles.
 - **The terminal emulator is not complete.** Mouse reporting is not
   supported, and wide characters (CJK, emoji) are treated as one column.
-- **Linux and macOS only.** The pseudo-terminal code uses Unix ioctls, so
-  Windows is not supported (WSL works). The macOS build is untested on real
-  hardware and is not packaged as an `.app`.
+- **Untested platforms.** The macOS and Windows builds compile but are
+  untested on real hardware, and are not packaged as an `.app` or installer.
+  Windows terminals use ConPTY, so they need Windows 10 version 1809 or
+  newer.
 - **Dialogs are drawn inside the window**, like GNOME's attached dialogs,
   rather than as windows of their own. The Search window is a real window.
 - **Input methods** can type text, but EdMin's code editor and terminal

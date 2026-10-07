@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -301,13 +302,26 @@ func TestWordRefs(t *testing.T) {
 	}
 }
 
+// ptyInput makes the default shell print EDMIN_42 and exit, and
+// ptyCommand prints it on its own; the 42 is computed so the echoed input
+// doesn't count.
+var ptyInput, ptyCommand = "echo EDMIN_$((40+2))\rexit\r", []string{"/bin/sh", "-c", "echo EDMIN_$((40+2))"}
+
+func init() {
+	if runtime.GOOS == "windows" {
+		ptyInput = "'EDMIN_' + (40+2)\rexit\r"
+		ptyCommand = []string{"powershell.exe", "-NoProfile", "-Command", "'EDMIN_' + (40+2)"}
+	}
+}
+
 func TestPtyShell(t *testing.T) {
-	master, cmd, err := startShell(t.TempDir(), nil, 24, 80)
+	master, err := startShell(t.TempDir(), nil, 24, 80)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cmd.Process.Kill()
-	master.Write([]byte("echo EDMIN_$((40+2))\rexit\r"))
+	defer master.Close()
+	defer master.Kill()
+	master.Write([]byte(ptyInput))
 	var out []byte
 	buf := make([]byte, 4096)
 	for !strings.Contains(string(out), "EDMIN_42") {
@@ -331,6 +345,12 @@ func TestInsideRoot(t *testing.T) {
 		"../x":        false,
 		"/etc/passwd": false,
 	}
+	if runtime.GOOS == "windows" {
+		cases[`..\x`] = false
+		cases[`C:\Windows`] = false
+		cases[`C:x`] = false
+		cases[`\Windows`] = false
+	}
 	for rel, want := range cases {
 		if got := insideRoot(rel); got != want {
 			t.Errorf("insideRoot(%q) = %v, want %v", rel, got, want)
@@ -339,11 +359,12 @@ func TestInsideRoot(t *testing.T) {
 }
 
 func TestPtyCustomShell(t *testing.T) {
-	master, cmd, err := startShell(t.TempDir(), []string{"/bin/sh", "-c", "echo EDMIN_$((40+2))"}, 24, 80)
+	master, err := startShell(t.TempDir(), ptyCommand, 24, 80)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cmd.Process.Kill()
+	defer master.Close()
+	defer master.Kill()
 	var out []byte
 	buf := make([]byte, 4096)
 	for !strings.Contains(string(out), "EDMIN_42") {
