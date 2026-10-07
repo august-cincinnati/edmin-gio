@@ -509,11 +509,12 @@ func (a *App) currentTerminal() *Terminal {
 	return a.terminals[max(0, min(a.termNB.Current, len(a.terminals)-1))]
 }
 
+// focusedTerminal returns the current terminal if it has the focus. Only the
+// current terminal is laid out, so the others never see their focus-lost event
+// and may still report focus.
 func (a *App) focusedTerminal() *Terminal {
-	for _, t := range a.terminals {
-		if t.HasFocus() {
-			return t
-		}
+	if t := a.currentTerminal(); t != nil && t.HasFocus() {
+		return t
 	}
 	return nil
 }
