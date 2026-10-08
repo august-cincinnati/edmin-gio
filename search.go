@@ -88,7 +88,7 @@ func NewSearchDialog(app *App) *SearchDialog {
 // present shows the window, opening it if needed.
 func (s *SearchDialog) present() {
 	if s.win != nil {
-		s.win.Perform(system.ActionRaise)
+		raiseWindow(s.win)
 		s.win.Invalidate()
 		return
 	}
@@ -350,7 +350,7 @@ func (s *SearchDialog) activate(r *resultRow) {
 	if e := s.app.editors.Open(r.path); e != nil {
 		e.GotoLine(r.m.line, r.m.colByte)
 		s.hide()
-		s.app.win.Perform(system.ActionRaise)
+		raiseWindow(s.app.win)
 	}
 }
 

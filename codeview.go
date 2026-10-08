@@ -816,14 +816,14 @@ func (cv *CodeView) handleEvents(gtx layout.Context, st codeStyle) {
 
 func (cv *CodeView) keyFilters() []event.Filter {
 	var fs []event.Filter
-	sm := key.ModShift | key.ModCtrl | key.ModAlt | key.ModShortcut
+	sm := key.ModShift | key.ModCtrl | key.ModAlt
 	for _, n := range []key.Name{key.NameLeftArrow, key.NameRightArrow, key.NameUpArrow, key.NameDownArrow,
 		key.NameHome, key.NameEnd, key.NamePageUp, key.NamePageDown, key.NameDeleteBackward, key.NameDeleteForward,
 		key.NameReturn, key.NameEnter, key.NameTab, key.NameEscape} {
 		fs = append(fs, key.Filter{Focus: cv, Name: n, Optional: sm})
 	}
 	for _, n := range []key.Name{"A", "C", "X", "V"} {
-		fs = append(fs, key.Filter{Focus: cv, Name: n, Required: key.ModShortcut})
+		fs = append(fs, key.Filter{Focus: cv, Name: n, Required: key.ModCtrl})
 	}
 	return fs
 }
@@ -833,7 +833,7 @@ func (cv *CodeView) onKey(gtx layout.Context, e key.Event) {
 		return
 	}
 	shift := e.Modifiers.Contain(key.ModShift)
-	ctrl := e.Modifiers.Contain(key.ModShortcut) || e.Modifiers.Contain(key.ModCtrl)
+	ctrl := e.Modifiers.Contain(key.ModCtrl)
 	cv.blinkT = time.Now()
 	page := max(cv.view.Y/max(cv.lineH, 1)-1, 1)
 	vert := func(d int) {
@@ -962,7 +962,7 @@ func (cv *CodeView) onPointer(gtx layout.Context, e pointer.Event) {
 		if pos.X < cv.gutterW {
 			p.Col = 0
 		}
-		if e.Modifiers.Contain(key.ModShortcut) && cv.OnCtrlClick != nil {
+		if e.Modifiers.Contain(key.ModCtrl) && cv.OnCtrlClick != nil {
 			if pos.X < cv.gutterW {
 				return // Ctrl+click in the gutter
 			}

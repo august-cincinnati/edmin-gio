@@ -111,7 +111,7 @@ func (d *Dialog) layout(gtx layout.Context) {
 			key.Filter{Name: key.NameEscape},
 			key.Filter{Name: key.NameReturn},
 			key.Filter{Name: key.NameEnter},
-			key.Filter{Name: "", Optional: key.ModShift | key.ModCtrl | key.ModShortcut | key.ModAlt},
+			key.Filter{Name: "", Optional: key.ModShift | key.ModCtrl | key.ModAlt},
 			key.FocusFilter{Target: &d.focusTag},
 		)
 		if !ok {

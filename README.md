@@ -137,9 +137,10 @@ On Windows, install Go and a MinGW-w64 C compiler, for example from
 [MSYS2](https://www.msys2.org) (`pacman -S mingw-w64-ucrt-x86_64-gcc`), with
 its `bin` folder on your `PATH`.
 
-On macOS, Cmd works in place of Ctrl for every shortcut and for
-Cmd+Click. In the terminal, Cmd+C and Cmd+V copy and paste, and Ctrl keeps
-its usual terminal meaning (Ctrl+C interrupts).
+On macOS the shortcuts use Ctrl, as on Linux and Windows, not Cmd: Ctrl+S
+saves, Ctrl+Click finds usages, and Ctrl+C/X/V/A/Z edit text. In the terminal,
+Ctrl+Shift+C and Ctrl+Shift+V copy and paste, and Ctrl keeps its usual
+terminal meaning (Ctrl+C interrupts).
 
 ## Building
 
@@ -306,7 +307,7 @@ buttons.
 | `vt.go`       | VT100/xterm screen emulator (no UI code)                  |
 | `pty_*.go`    | Pseudo-terminal support (Unix ptys with Linux and macOS ioctls; ConPTY on Windows) |
 | `detach_*.go` | Starting EdMin in the background (Unix sessions, Windows detached processes) |
-| `keys.go`     | Modifier handling (Cmd as Ctrl on macOS)                  |
+| `keys.go`     | Modifier handling (Ctrl shortcuts on every platform)      |
 | `shell.go`    | Choosing each project's terminal shell (WSL, sshfs)     |
 | `util.go`     | Word-based fallbacks for files without a grammar          |
 

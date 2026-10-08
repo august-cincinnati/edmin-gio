@@ -1,24 +1,12 @@
 package main
 
-import (
-	"runtime"
+import "gioui.org/io/key"
 
-	"gioui.org/io/key"
-)
-
-// shortcutMods reduces an event's modifiers to Ctrl, Shift and Alt,
-// counting macOS's Command key as Ctrl so that Cmd+S works like Ctrl+S
-// there.
+// shortcutMods reduces an event's modifiers to Ctrl, Shift, Alt and
+// Command. Shortcuts use Ctrl on every platform, macOS included; Command is
+// kept so that a Cmd combination never matches a Ctrl shortcut.
 func shortcutMods(m key.Modifiers) key.Modifiers {
-	if isCommand(m) {
-		m |= key.ModCtrl
-	}
-	return m & (key.ModCtrl | key.ModShift | key.ModAlt)
-}
-
-// isCommand reports whether macOS's Command key is held.
-func isCommand(m key.Modifiers) bool {
-	return runtime.GOOS == "darwin" && m.Contain(key.ModCommand)
+	return m & (key.ModCtrl | key.ModShift | key.ModAlt | key.ModCommand)
 }
 
 // panelDigit returns which of the panel shortcut digits 1-5 a key is, or 0.

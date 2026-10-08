@@ -462,7 +462,7 @@ func (t *Terminal) handleEvents(gtx layout.Context) {
 		transfer.TargetFilter{Target: t, Type: "application/text"},
 	}
 	if t.focused {
-		all := key.ModCtrl | key.ModShift | key.ModAlt | key.ModCommand | key.ModSuper
+		all := key.ModCtrl | key.ModShift | key.ModAlt | key.ModSuper
 		filters = append(filters,
 			key.Filter{Focus: t, Name: "", Optional: all},
 			key.Filter{Focus: t, Name: key.NameTab, Optional: key.ModShift | key.ModAlt},
@@ -477,7 +477,7 @@ func (t *Terminal) handleEvents(gtx layout.Context) {
 		case key.FocusEvent:
 			t.focused = e.Focus
 			if e.Focus {
-				all := key.ModCtrl | key.ModShift | key.ModAlt | key.ModCommand | key.ModSuper
+				all := key.ModCtrl | key.ModShift | key.ModAlt | key.ModSuper
 				filters = append(filters[:3],
 					key.Filter{Focus: t, Name: "", Optional: all},
 					key.Filter{Focus: t, Name: key.NameTab, Optional: key.ModShift | key.ModAlt})
@@ -568,17 +568,7 @@ func (t *Terminal) onKey(gtx layout.Context, k key.Event) {
 	shift := mods.Contain(key.ModShift)
 	alt := mods.Contain(key.ModAlt)
 
-	// Ctrl+Shift+C/V copy and paste; on macOS so do Cmd+C/V, and other Cmd
-	// combos are left to the app since Ctrl stays the terminal's own key.
-	if isCommand(mods) {
-		switch k.Name {
-		case "C":
-			t.copySelection(gtx)
-		case "V":
-			t.paste(gtx)
-		}
-		return
-	}
+	// Ctrl+Shift+C/V copy and paste.
 	if ctrl && shift {
 		switch k.Name {
 		case "C":

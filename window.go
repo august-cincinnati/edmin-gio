@@ -34,6 +34,16 @@ func (d *windowDeco) takeClose() bool {
 	return c
 }
 
+// raiseWindow brings w to the front from any window's event handling. On
+// macOS every window shares the one native thread, which waits on the
+// window whose event is being handled until that window's loop asks for its
+// next event. Perform and Option on another window wait for that thread, so
+// they would hang the app; the raise runs on its own goroutine instead, once
+// the thread is free.
+func raiseWindow(w *app.Window) {
+	go w.Perform(system.ActionRaise)
+}
+
 func (d *windowDeco) config(c app.Config) {
 	d.maximized = c.Mode == app.Maximized || c.Mode == app.Fullscreen
 }

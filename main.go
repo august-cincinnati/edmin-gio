@@ -42,6 +42,9 @@ type App struct {
 
 	status string
 	title  string
+	// shownTitle is the title last given to the window, which the window's
+	// loop updates; see raiseWindow for why only that loop may.
+	shownTitle string
 
 	// Panel visibility and sizes (in dp): the explorer's and build panel's
 	// widths and the terminal panel's height.
@@ -211,7 +214,13 @@ func (a *App) loop() {
 			e.Frame(gtx.Ops)
 		}
 		closing := a.deco.takeClose()
+		title := a.title
+		retitle := title != a.shownTitle
+		a.shownTitle = title
 		uiMu.Unlock()
+		if retitle {
+			a.win.Option(app.Title(title))
+		}
 		if closing {
 			a.win.Perform(system.ActionClose)
 		}
@@ -270,12 +279,7 @@ func (a *App) updateTitle() {
 		}
 		title = mod + relPath(a.root, e.Path) + " — EdMin"
 	}
-	if title != a.title {
-		a.title = title
-		if a.win != nil {
-			a.win.Option(app.Title(title))
-		}
-	}
+	a.title = title
 	a.invalidate()
 }
 
@@ -765,7 +769,7 @@ func (a *App) closeAll(close func()) {
 		}
 		x := list[i]
 		if len(x.editors.Unsaved()) > 0 {
-			x.win.Perform(system.ActionRaise)
+			raiseWindow(x.win)
 		}
 		x.confirmQuit(func() { next(i + 1) })
 	}
@@ -778,7 +782,7 @@ func (a *App) openFolderInNewWindow() {
 	a.chooseFolder("Open Folder in New Window", func(dir string) {
 		for _, x := range apps {
 			if x.root == dir {
-				x.win.Perform(system.ActionRaise)
+				raiseWindow(x.win)
 				return
 			}
 		}
@@ -985,7 +989,7 @@ func (a *App) cycleTab(delta int) {
 // shortcutFilters are the keys the window handles itself, given whether a
 // terminal has the focus (it then gets plain Ctrl combinations).
 func (a *App) shortcutFilters(inTerm bool) []event.Filter {
-	sc := key.ModShortcut
+	sc := key.ModCtrl
 	var fs []event.Filter
 	add := func(req, opt key.Modifiers, names ...key.Name) {
 		for _, n := range names {

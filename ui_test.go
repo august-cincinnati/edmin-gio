@@ -154,15 +154,15 @@ func TestEditingAndSave(t *testing.T) {
 		t.Fatalf("not marked modified: title %q", a.title)
 	}
 	// Undo removes "y", then the newline and indent.
-	h.send(press("Z", key.ModShortcut), press("Z", key.ModShortcut))
+	h.send(press("Z", key.ModCtrl), press("Z", key.ModCtrl))
 	if got := e.Text(); got != "package main\n\nfunc main() {\n\tx := 1\n}\n" {
 		t.Fatalf("after undo: %q", got)
 	}
-	h.send(press("Z", key.ModShortcut|key.ModShift), press("Z", key.ModShortcut|key.ModShift))
+	h.send(press("Z", key.ModCtrl|key.ModShift), press("Z", key.ModCtrl|key.ModShift))
 	if got := e.Text(); got != want {
 		t.Fatalf("after redo: %q", got)
 	}
-	h.send(press("S", key.ModShortcut))
+	h.send(press("S", key.ModCtrl))
 	data, _ := os.ReadFile(e.Path)
 	if string(data) != want || e.View.Modified() {
 		t.Fatalf("save failed: %q modified=%v", data, e.View.Modified())
@@ -182,7 +182,7 @@ func TestCloseShortcut(t *testing.T) {
 	uiMu.Unlock()
 	h.frames(3)
 	h.typeText("b")
-	h.send(press("X", key.ModShortcut|key.ModShift))
+	h.send(press("X", key.ModCtrl|key.ModShift))
 	if len(a.dialogs) != 1 || a.deco.closing {
 		t.Fatalf("no save question: dialogs %d, closing %v", len(a.dialogs), a.deco.closing)
 	}
@@ -207,7 +207,7 @@ func TestCRLFKept(t *testing.T) {
 	}
 	h.send(press(key.NameEnd, 0), press(key.NameReturn, 0))
 	h.typeText("new")
-	h.send(press("S", key.ModShortcut))
+	h.send(press("S", key.ModCtrl))
 	if data, _ := os.ReadFile(e.Path); string(data) != "one\r\nnew\r\ntwo\r\n" {
 		t.Fatalf("saved %q", data)
 	}
@@ -220,7 +220,7 @@ func TestGotoLine(t *testing.T) {
 	e := a.editors.Open(filepath.Join(a.root, "a.txt"))
 	uiMu.Unlock()
 	h.frames(3)
-	h.send(press("G", key.ModShortcut))
+	h.send(press("G", key.ModCtrl))
 	if len(a.dialogs) != 1 {
 		t.Fatal("Ctrl+G did not open the Go to Line prompt")
 	}
@@ -231,6 +231,37 @@ func TestGotoLine(t *testing.T) {
 	}
 }
 
+// Text boxes undo with Ctrl+Z and redo with Ctrl+Shift+Z or Ctrl+Y.
+func TestEntryUndo(t *testing.T) {
+	h := newHarness(t, map[string]string{"a.txt": "foo bar\n"})
+	a := h.a
+	uiMu.Lock()
+	a.editors.Open(filepath.Join(a.root, "a.txt"))
+	uiMu.Unlock()
+	h.frames(2)
+	h.send(press("F", key.ModCtrl))
+	ent := a.editors.findEnt
+	h.typeText("ab")
+	h.frames(1)
+	text := func() string { uiMu.Lock(); defer uiMu.Unlock(); return ent.Text() }
+	for _, step := range []struct {
+		mods key.Modifiers
+		name key.Name
+		want string
+	}{
+		{key.ModCtrl, "Z", "a"},
+		{key.ModCtrl, "Z", ""},
+		{key.ModCtrl, "Z", ""},
+		{key.ModCtrl | key.ModShift, "Z", "a"},
+		{key.ModCtrl, "Y", "ab"},
+	} {
+		h.send(press(step.name, step.mods))
+		if got := text(); got != step.want {
+			t.Fatalf("after %v+%s: %q, want %q", step.mods, step.name, got, step.want)
+		}
+	}
+}
+
 func TestFindBar(t *testing.T) {
 	h := newHarness(t, map[string]string{"a.txt": "one foo\nfoo two\nFOO three\n"})
 	a := h.a
@@ -238,7 +269,7 @@ func TestFindBar(t *testing.T) {
 	e := a.editors.Open(filepath.Join(a.root, "a.txt"))
 	uiMu.Unlock()
 	h.frames(2)
-	h.send(press("F", key.ModShortcut))
+	h.send(press("F", key.ModCtrl))
 	if !a.editors.findOpen || !a.editors.findEnt.focused {
 		t.Fatal("find bar not open and focused")
 	}
@@ -268,7 +299,7 @@ func TestPanelsAndDialogs(t *testing.T) {
 	h := newHarness(t, map[string]string{"a.txt": "hello\n", "dir/b.txt": "b\n"})
 	a := h.a
 	// Ctrl+1 focuses the explorer; arrows and Enter open a file.
-	h.send(press("1", key.ModShortcut))
+	h.send(press("1", key.ModCtrl))
 	if !a.tree.focused {
 		t.Fatal("Ctrl+1 did not focus the tree")
 	}
@@ -281,20 +312,20 @@ func TestPanelsAndDialogs(t *testing.T) {
 		t.Fatal("Enter did not open dir/b.txt")
 	}
 	// Ctrl+Shift+1 closes the explorer; Ctrl+3 / Ctrl+Shift+3 the build panel.
-	h.send(press("!", key.ModShortcut|key.ModShift))
+	h.send(press("!", key.ModCtrl|key.ModShift))
 	if a.leftOn {
 		t.Fatal("explorer still open")
 	}
-	h.send(press("#", key.ModShortcut|key.ModShift))
+	h.send(press("#", key.ModCtrl|key.ModShift))
 	if a.buildOn {
 		t.Fatal("build panel still open")
 	}
-	h.send(press("3", key.ModShortcut))
+	h.send(press("3", key.ModCtrl))
 	if !a.buildOn || !a.build.focused {
 		t.Fatal("Ctrl+3 did not open and focus the build panel")
 	}
 	// Ctrl+Shift+T in the build panel adds a command through a dialog.
-	h.send(press("T", key.ModShortcut|key.ModShift))
+	h.send(press("T", key.ModCtrl|key.ModShift))
 	if len(a.dialogs) != 1 {
 		t.Fatal("no add-command dialog")
 	}
@@ -308,14 +339,14 @@ func TestPanelsAndDialogs(t *testing.T) {
 		t.Fatalf("commands = %+v dialogs=%d", a.build.cmds, len(a.dialogs))
 	}
 	// Ctrl+4 opens Settings; picking a theme applies and saves it.
-	h.send(press("4", key.ModShortcut))
+	h.send(press("4", key.ModCtrl))
 	if a.settingsDlg == nil {
 		t.Fatal("no settings")
 	}
 	uiMu.Lock()
 	a.chooseTheme(themeByName("Tan"))
 	uiMu.Unlock()
-	h.send(press("$", key.ModShortcut|key.ModShift))
+	h.send(press("$", key.ModCtrl|key.ModShift))
 	if a.settingsDlg != nil || a.theme.Name != "Tan" {
 		t.Fatal("settings not closed or theme not applied")
 	}
@@ -324,9 +355,9 @@ func TestPanelsAndDialogs(t *testing.T) {
 	}
 	// Closing a modified tab asks first.
 	e := a.editors.Current()
-	h.send(press("5", key.ModShortcut))
+	h.send(press("5", key.ModCtrl))
 	h.typeText("z")
-	h.send(press("W", key.ModShortcut))
+	h.send(press("W", key.ModCtrl))
 	if len(a.dialogs) != 1 || a.dialogs[0].Message == "" {
 		t.Fatal("no save question")
 	}
@@ -334,7 +365,7 @@ func TestPanelsAndDialogs(t *testing.T) {
 	if a.editors.indexOf(e) < 0 {
 		t.Fatal("cancel closed the tab")
 	}
-	h.send(press("W", key.ModShortcut))
+	h.send(press("W", key.ModCtrl))
 	uiMu.Lock()
 	a.dialogs[0].respond(RespNo)
 	uiMu.Unlock()
@@ -350,7 +381,7 @@ func TestTerminalTabs(t *testing.T) {
 	if len(a.terminals) != 1 {
 		t.Fatalf("terminals = %d", len(a.terminals))
 	}
-	h.send(press("T", key.ModShortcut|key.ModShift))
+	h.send(press("T", key.ModCtrl|key.ModShift))
 	if len(a.terminals) != 2 || !a.terminals[1].focused {
 		t.Fatal("Ctrl+Shift+T did not open and focus a terminal")
 	}
@@ -363,12 +394,12 @@ func TestTerminalTabs(t *testing.T) {
 		t.Fatalf("terminal shows %q", got)
 	}
 	// Rename with Ctrl+Shift+R.
-	h.send(press("R", key.ModShortcut|key.ModShift))
+	h.send(press("R", key.ModCtrl|key.ModShift))
 	r := a.termLabels[a.terminals[1]]
 	if !r.editing {
 		t.Fatal("not renaming")
 	}
-	h.send(press("A", key.ModShortcut))
+	h.send(press("A", key.ModCtrl))
 	h.typeText("Build")
 	h.send(press(key.NameReturn, 0))
 	if r.name != "Build" || !r.custom {
@@ -382,11 +413,11 @@ func TestTerminalTabs(t *testing.T) {
 		t.Fatal("focus did not return to the terminal")
 	}
 	// Ctrl+Tab cycles terminal tabs while a terminal has focus.
-	h.send(press(key.NameTab, key.ModShortcut))
+	h.send(press(key.NameTab, key.ModCtrl))
 	if a.termNB.Current != 0 {
 		t.Fatalf("current terminal = %d", a.termNB.Current)
 	}
-	h.send(press("W", key.ModShortcut|key.ModShift))
+	h.send(press("W", key.ModCtrl|key.ModShift))
 	if len(a.terminals) != 1 {
 		t.Fatal("Ctrl+Shift+W did not close the terminal")
 	}
@@ -444,7 +475,7 @@ func TestBuildRunKeepsFocus(t *testing.T) {
 	uiMu.Lock()
 	a.build.Load()
 	uiMu.Unlock()
-	h.send(press("3", key.ModShortcut))
+	h.send(press("3", key.ModCtrl))
 	h.send(press(key.NameReturn, 0))
 	time.Sleep(300 * time.Millisecond)
 	h.frames(3)

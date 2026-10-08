@@ -3,9 +3,12 @@ package main
 import (
 	"image"
 	"image/color"
+	"io"
+	"strings"
 	"time"
 
 	"gioui.org/f32"
+	"gioui.org/io/clipboard"
 	"gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
@@ -296,6 +299,17 @@ type Entry struct {
 	submitted           bool
 	changed             bool
 	clearClick          Clicker
+	// The entry's own undo history: Gio's editor keeps one, but only its
+	// shortcut key (Cmd on macOS) reaches it, so the entry keeps another for
+	// Ctrl+Z. cur is the text as last seen.
+	undo, redo []entryState
+	cur        entryState
+}
+
+// entryState is an entry's text and selection.
+type entryState struct {
+	text       string
+	start, end int
 }
 
 func NewEntry() *Entry {
@@ -324,6 +338,7 @@ func (e *Entry) Update(gtx layout.Context) {
 			}
 		}
 	}
+	e.ctrlKeys(gtx)
 	for {
 		ev, ok := e.Editor.Update(gtx)
 		if !ok {
@@ -337,6 +352,87 @@ func (e *Entry) Update(gtx layout.Context) {
 		}
 	}
 	e.focused = gtx.Focused(&e.Editor)
+	e.record()
+}
+
+// record notes a change to the text, typed or set, in the undo history.
+func (e *Entry) record() {
+	start, end := e.Selection()
+	now := entryState{e.Text(), start, end}
+	if now.text != e.cur.text {
+		e.undo = append(e.undo, e.cur)
+		e.redo = nil
+	}
+	e.cur = now
+}
+
+// restore makes the text one from the undo history, after saving the
+// current text on the other one.
+func (e *Entry) restore(from, to *[]entryState) {
+	if len(*from) == 0 {
+		return
+	}
+	st := (*from)[len(*from)-1]
+	*from = (*from)[:len(*from)-1]
+	*to = append(*to, e.cur)
+	e.SetText(st.text)
+	e.SetCaret(st.start, st.end)
+	e.cur = st
+	e.changed = true
+}
+
+// ctrlKeys handles Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y with the entry's own
+// undo history, and where the editor widget binds its keys to Command (on
+// macOS) gives it Ctrl+A/C/X/V too. Cmd+Z is taken here so that the
+// editor's own history, which the entry no longer follows, is never used.
+func (e *Entry) ctrlKeys(gtx layout.Context) {
+	filters := []event.Filter{
+		key.Filter{Focus: &e.Editor, Name: "Z", Required: key.ModCtrl, Optional: key.ModShift},
+		key.Filter{Focus: &e.Editor, Name: "Y", Required: key.ModCtrl},
+	}
+	if key.ModShortcut != key.ModCtrl {
+		filters = append(filters,
+			key.Filter{Focus: &e.Editor, Name: "Z", Required: key.ModShortcut, Optional: key.ModShift},
+			key.Filter{Focus: &e.Editor, Name: "A", Required: key.ModCtrl},
+			key.Filter{Focus: &e.Editor, Name: "C", Required: key.ModCtrl},
+			key.Filter{Focus: &e.Editor, Name: "X", Required: key.ModCtrl},
+			key.Filter{Focus: &e.Editor, Name: "V", Required: key.ModCtrl},
+		)
+	}
+	for {
+		ev, ok := gtx.Event(filters...)
+		if !ok {
+			break
+		}
+		k, ok := ev.(key.Event)
+		if !ok || k.State != key.Press || !k.Modifiers.Contain(key.ModCtrl) {
+			continue
+		}
+		e.record()
+		switch k.Name {
+		case "Z":
+			if k.Modifiers.Contain(key.ModShift) {
+				e.restore(&e.redo, &e.undo)
+			} else {
+				e.restore(&e.undo, &e.redo)
+			}
+		case "Y":
+			e.restore(&e.redo, &e.undo)
+		case "A":
+			e.SetCaret(e.Len(), 0)
+		case "C", "X":
+			if sel := e.SelectedText(); sel != "" {
+				gtx.Execute(clipboard.WriteCmd{Type: "application/text", Data: io.NopCloser(strings.NewReader(sel))})
+				if k.Name == "X" {
+					e.Insert("")
+					e.changed = true
+				}
+			}
+		case "V":
+			// The editor reads the clipboard's reply as it would after Cmd+V.
+			gtx.Execute(clipboard.ReadCmd{Tag: &e.Editor})
+		}
+	}
 }
 
 // take returns and clears a flag.
