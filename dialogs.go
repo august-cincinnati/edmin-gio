@@ -58,6 +58,7 @@ type Dialog struct {
 	inited   bool
 	app      *App
 	focusTag bool // focused when nothing else is, to receive keys
+	sel      int  // index of the keyboard-selected button, -1 for none
 }
 
 func (d *Dialog) addButtons(pairs ...any) {
@@ -101,6 +102,12 @@ func (d *Dialog) layout(gtx layout.Context) {
 	// Keys.
 	if !d.inited {
 		d.inited = true
+		d.sel = -1
+		for i, b := range d.Buttons {
+			if b.Resp == d.Default {
+				d.sel = i
+			}
+		}
 		gtx.Execute(key.FocusCmd{Tag: &d.focusTag})
 		if d.Init != nil {
 			d.Init(gtx)
@@ -111,6 +118,9 @@ func (d *Dialog) layout(gtx layout.Context) {
 			key.Filter{Name: key.NameEscape},
 			key.Filter{Name: key.NameReturn},
 			key.Filter{Name: key.NameEnter},
+			key.Filter{Name: key.NameTab, Optional: key.ModShift},
+			key.Filter{Name: key.NameLeftArrow},
+			key.Filter{Name: key.NameRightArrow},
 			key.Filter{Name: "", Optional: key.ModShift | key.ModCtrl | key.ModAlt},
 			key.FocusFilter{Target: &d.focusTag},
 		)
@@ -128,7 +138,25 @@ func (d *Dialog) layout(gtx layout.Context) {
 		case key.NameEscape:
 			d.respond(RespCancel)
 			return
+		case key.NameTab, key.NameLeftArrow, key.NameRightArrow:
+			arrow := e.Name != key.NameTab
+			if n := len(d.Buttons); n > 0 && !(arrow && d.Body != nil) {
+				step := 1
+				if e.Name == key.NameLeftArrow || e.Name == key.NameTab && e.Modifiers.Contain(key.ModShift) {
+					step = -1
+				}
+				if d.sel < 0 {
+					d.sel = (n + min(step, 0)) % n
+				} else {
+					d.sel = (d.sel + step + n) % n
+				}
+				d.app.invalidate()
+			}
 		case key.NameReturn, key.NameEnter:
+			if d.sel >= 0 && d.sel < len(d.Buttons) {
+				d.respond(d.Buttons[d.sel].Resp)
+				return
+			}
 			if d.Default != RespNone {
 				d.respond(d.Default)
 				return
@@ -217,8 +245,11 @@ func (d *Dialog) content(gtx layout.Context, pal palette) layout.Dimensions {
 					defer d.respond(resp)
 				}
 				r := image.Rect(x0, gtx.Dp(1), x1, h)
-				if b.btn.hovered {
+				if b.btn.hovered || i == d.sel {
 					bg := pal.Hover
+					if i == d.sel {
+						bg = pal.Selection
+					}
 					rr := clip.RRect{Rect: r}
 					if i == 0 {
 						rr.SW = gtx.Dp(8)
@@ -291,7 +322,7 @@ func (d *Dialog) content(gtx layout.Context, pal palette) layout.Dimensions {
 							resp := b.Resp
 							defer d.respond(resp)
 						}
-						return b.btn.Layout(gtx, buttonStyle{Text: b.Label, Pal: pal, Suggest: b.Resp == d.Default && len(d.Buttons) > 1})
+						return b.btn.Layout(gtx, buttonStyle{Text: b.Label, Pal: pal, Checked: i == d.sel, Suggest: b.Resp == d.Default && len(d.Buttons) > 1})
 					}))
 				}
 				return layout.Flex{}.Layout(gtx, items...)
