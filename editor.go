@@ -405,7 +405,7 @@ func (a *EditorArea) Layout(gtx layout.Context) layout.Dimensions {
 					return Label{Text: name, Color: pal.FG}.Layout(gtx)
 				},
 				Tip:    func(i int) string { return a.editors[i].Path },
-				Closed: func(i int) { a.Close(a.editors[i], app.focusWorkspace) },
+				Closed: func(i int) { a.Close(a.editors[i], app.focusAfterClose) },
 			})
 			e := a.Current()
 			g.Constraints = layout.Exact(image.Pt(g.Constraints.Max.X, mainH-sd.Size.Y-2*gtx.Dp(1)))

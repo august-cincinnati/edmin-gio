@@ -421,6 +421,30 @@ func TestTerminalTabs(t *testing.T) {
 	if len(a.terminals) != 1 {
 		t.Fatal("Ctrl+Shift+W did not close the terminal")
 	}
+	// Closing the last terminal collapses the panel.
+	h.send(press("W", key.ModCtrl|key.ModShift))
+	h.frames(2)
+	if len(a.terminals) != 0 || a.termOn {
+		t.Fatal("closing the last terminal did not collapse the panel")
+	}
+}
+
+func TestCloseLastFileFocusesExplorer(t *testing.T) {
+	h := newHarness(t, map[string]string{"a.txt": "a\n"})
+	a := h.a
+	uiMu.Lock()
+	a.editors.Open(filepath.Join(a.root, "a.txt"))
+	a.leftOn = false
+	uiMu.Unlock()
+	h.frames(2)
+	h.send(press("W", key.ModCtrl))
+	h.frames(2)
+	if len(a.editors.editors) != 0 {
+		t.Fatal("Ctrl+W did not close the file")
+	}
+	if !a.leftOn || !a.tree.focused {
+		t.Fatal("closing the last file did not focus the explorer")
+	}
 }
 
 func TestCtrlClickDefinition(t *testing.T) {

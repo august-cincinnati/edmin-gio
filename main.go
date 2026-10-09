@@ -428,7 +428,9 @@ func (a *App) closeTerminal(t *Terminal) {
 	a.dropTerminal(t)
 	a.saveTerminals()
 	if len(a.terminals) == 0 {
+		// Closing the last terminal collapses the panel.
 		a.termOn = false
+		a.focusAfterClose()
 	}
 }
 
@@ -506,6 +508,15 @@ func (a *App) focusWorkspace() {
 	} else {
 		a.focusTag(a.tree)
 	}
+}
+
+// focusAfterClose moves the focus after a tab closed: to the current editor,
+// or, once the last file is closed, to the explorer, opening it if collapsed.
+func (a *App) focusAfterClose() {
+	if a.editors.Current() == nil {
+		a.showExplorer()
+	}
+	a.focusWorkspace()
 }
 
 func (a *App) currentTerminal() *Terminal {
@@ -946,18 +957,12 @@ func (a *App) closeCurrentTab() {
 			a.closeTerminal(t)
 			if t := a.currentTerminal(); t != nil {
 				t.Focus()
-			} else if e := a.editors.Current(); e != nil {
-				a.focusTag(e.View)
 			}
 		}
 		return
 	}
 	if e := a.editors.Current(); e != nil {
-		a.editors.Close(e, func() {
-			if e := a.editors.Current(); e != nil {
-				a.focusTag(e.View)
-			}
-		})
+		a.editors.Close(e, a.focusAfterClose)
 	}
 }
 
@@ -1080,7 +1085,7 @@ func (a *App) onShortcut(e key.Event) {
 		}
 	case "W":
 		if ctrl && ed != nil {
-			a.editors.Close(ed)
+			a.editors.Close(ed, a.focusAfterClose)
 		}
 	case "F":
 		if ctrl && ed != nil {
