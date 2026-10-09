@@ -173,10 +173,19 @@ func (a *App) showSettings() {
 	d := &Dialog{Title: "Settings", White: true, Width: 320, Default: RespNone}
 	a.settingsDlg = d
 	radios := make([]Toggle, len(themes))
+	// focus is the keyboard-focused radio, or len(themes) for the Close button.
+	focus := 0
+	last := 0 // the theme to return to from Close
+	for i, t := range themes {
+		if t == a.theme {
+			focus, last = i, i
+		}
+	}
 	d.Body = func(gtx layout.Context) layout.Dimensions {
 		pal := d.pal()
 		for i, t := range themes {
 			radios[i].On = t == a.theme
+			radios[i].Focus = i == focus
 			if radios[i].Changed(gtx, true) && t != a.theme {
 				a.chooseTheme(t)
 			}
@@ -199,6 +208,39 @@ func (a *App) showSettings() {
 	}
 	d.addButtons("Close", RespClose)
 	d.OnKey = func(gtx layout.Context, e key.Event) bool {
+		switch e.Name {
+		case key.NameTab, key.NameLeftArrow, key.NameRightArrow:
+			nt := len(themes)
+			back := e.Name == key.NameLeftArrow || e.Modifiers.Contain(key.ModShift) && e.Name == key.NameTab
+			switch {
+			case e.Name == key.NameTab && back:
+				// Shift+Tab jumps to Close, and back to the themes from there.
+				if focus == nt {
+					focus = last
+				} else {
+					last, focus = focus, nt
+				}
+			case focus == nt:
+				focus = last
+			case back:
+				focus = (focus + nt - 1) % nt
+			default:
+				focus = (focus + 1) % nt
+			}
+			d.sel = -1
+			if focus == nt {
+				d.sel = 0
+			} else {
+				last = focus
+				if t := themes[focus]; t != a.theme {
+					a.chooseTheme(t)
+				}
+			}
+			a.invalidate()
+			return true
+		case key.NameReturn, key.NameEnter:
+			return focus < len(themes)
+		}
 		n := panelDigit(e.Name)
 		mods := shortcutMods(e.Modifiers)
 		if n == 0 || mods != key.ModCtrl && mods != key.ModCtrl|key.ModShift {

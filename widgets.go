@@ -15,6 +15,7 @@ import (
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
 )
@@ -185,7 +186,10 @@ func strokeShape(gtx layout.Context, rr clip.RRect, w int, c color.NRGBA) {
 	appendRRect(&p, inner, true)
 	spec := p.End()
 	defer clip.Outline{Path: spec}.Op().Push(gtx.Ops).Pop()
-	fill(gtx, c)
+	// Paint the whole clip: fill would cut off anything left of or above the
+	// origin.
+	paint.ColorOp{Color: c}.Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
 }
 
 // appendRRect adds rr's outline to p, clockwise or (reverse) anticlockwise,
@@ -480,7 +484,8 @@ func (e *Entry) Layout(gtx layout.Context, pal palette, width unit.Dp) layout.Di
 
 type Toggle struct {
 	Clicker
-	On bool
+	On    bool
+	Focus bool // keyboard focus ring
 }
 
 // Changed reports whether a click toggled the box.
@@ -534,6 +539,11 @@ func (t *Toggle) Layout(gtx layout.Context, pal palette, label string, radio boo
 		}
 		fillRRect(gtx, r, rad, bg)
 		strokeShape(gtx, clip.UniformRRect(r, rad), gtx.Dp(1), mix(pal.Border, pal.FG, 0.35))
+	}
+	if t.Focus {
+		o := gtx.Dp(2)
+		fr := image.Rect(r.Min.X-o, r.Min.Y-o, r.Max.X+o, r.Max.Y+o)
+		strokeShape(gtx, clip.UniformRRect(fr, rad+o), gtx.Dp(1), accent)
 	}
 	off := op.Offset(image.Pt(box+gap, (h-ld.Size.Y)/2)).Push(gtx.Ops)
 	lc.Add(gtx.Ops)
