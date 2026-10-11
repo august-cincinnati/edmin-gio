@@ -538,11 +538,19 @@ func (a *App) folderDialog(title string, then func(string)) {
 					gtx.Constraints = layout.Exact(image.Pt(gtx.Constraints.Max.X, h))
 					fill(gtx, pal.BG)
 					rowH := gtx.Dp(28)
+					// load replaces dirs and clicks, so it must wait until
+					// the list has finished drawing its rows.
+					var next string
+					defer func() {
+						if next != "" {
+							load(next)
+						}
+					}()
 					d := list.layout(gtx, len(dirs), rowH, 0, func(gtx layout.Context, i int) {
 						for _, c := range clicks[i].Update(gtx) {
 							if c.Count >= 2 {
 								name := dirs[i]
-								defer load(filepath.Clean(filepath.Join(cur, name)))
+								next = filepath.Clean(filepath.Join(cur, name))
 							} else {
 								sel = i
 							}
